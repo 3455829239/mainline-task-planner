@@ -1,0 +1,7 @@
+### 测试豆包 AI 任务拆解
+POST http://localhost:3000/api/tasks/ai-decompose
+Content-Type: application/json
+
+{
+    "goal": "在3天内自学并上线一个AI任务管理器"
+}

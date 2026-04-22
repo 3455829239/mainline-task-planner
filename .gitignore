@@ -1,0 +1,50 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# 忽略所有层级的 node_modules
+node_modules/
+**/node_modules/
+
+# 忽略打包产物
+dist/
+**/dist/
+
+# 忽略日志
+*.log
+**/logs/
+
+# 忽略本地环境配置
+.env
+.env.*
+!.env.example
+
+# 忽略 IDE 配置文件
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?

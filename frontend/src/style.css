@@ -1,0 +1,7 @@
+@import "tailwindcss";
+
+/* 保持背景是黑色的 */
+body {
+  background-color: black;
+  margin: 0;
+}
