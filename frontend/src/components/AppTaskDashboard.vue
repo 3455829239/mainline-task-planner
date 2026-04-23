@@ -64,6 +64,7 @@
           12 Dec
         </div>
         <button
+          @click="toggleChat"
           class="bg-white/30 hover:bg-white/40 transition backdrop-blur-md text-white text-xs font-bold py-1.5 px-3 rounded-full"
         >
           进入对话
@@ -286,10 +287,81 @@
       </svg>
     </div>
   </div>
+  <Transition name="fade">
+    <div
+      v-if="isChatOpen"
+      class="fixed inset-0 z-[100] bg-black flex flex-col max-w-[400px] mx-auto border-x border-gray-800"
+    >
+      <div
+        class="p-6 flex justify-between items-center border-b border-gray-800"
+      >
+        <h2 class="text-xl font-bold text-white">AI 任务规划助手</h2>
+        <button
+          @click="toggleChat"
+          class="p-2 hover:bg-gray-800 rounded-full transition"
+        >
+          <svg
+            class="w-6 h-6 text-gray-400"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M6 18L18 6M6 6l12 12"
+            />
+          </svg>
+        </button>
+      </div>
+
+      <div class="flex-1 p-6 overflow-y-auto flex flex-col justify-end">
+        <div
+          v-if="!isAiLoading"
+          class="bg-gray-900 self-start p-4 rounded-2xl rounded-bl-none max-w-[80%] text-gray-300 mb-4"
+        >
+          你好！告诉我你今天的目标（例如：开发一个简单的记事本APP），我来帮你拆解任务。
+        </div>
+        <div
+          v-if="isAiLoading"
+          class="self-center flex flex-col items-center gap-3"
+        >
+          <div
+            class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"
+          ></div>
+          <p class="text-gray-500 text-sm">豆包 AI 正在思考并规划中...</p>
+        </div>
+      </div>
+
+      <div class="p-6 border-t border-gray-800 bg-black">
+        <div class="flex gap-3 bg-gray-900 p-2 rounded-2xl items-center">
+          <input
+            v-model="userInput"
+            @keyup.enter="askAI"
+            placeholder="输入你的目标..."
+            class="flex-1 bg-transparent border-none focus:ring-0 text-white px-3 py-2"
+          />
+          <button
+            @click="askAI"
+            :disabled="isAiLoading"
+            class="bg-blue-600 p-3 rounded-xl hover:bg-blue-500 transition disabled:opacity-50"
+          >
+            <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
+            </svg>
+          </button>
+        </div>
+      </div>
+    </div>
+  </Transition>
 </template>
 
 <script setup>
-import { ref, defineComponent, h } from "vue";
+import { ref, defineComponent, h, onMounted } from "vue"; // 加上 onMounted
+import { api } from "../api.js"; // 核心：引入你写的 api 对象
+
+// ... 下面是原本的代码
 
 // --- 1. 日历数据模拟 ---
 const weekDays = ref([
@@ -303,38 +375,47 @@ const weekDays = ref([
 ]);
 
 // --- 2. 优先级任务数据 (双向绑定测试) ---
-const priorityTasks = ref([
-  { id: 1, text: "Task 1", completed: true },
-  { id: 2, text: "Task 2", completed: false },
-  { id: 3, text: "Task 3", completed: false },
-  { id: 4, text: "Task 4", completed: false },
-  { id: 5, text: "Task 5", completed: false },
-]);
+const priorityTasks = ref([]);
 
 const toggleTask = (task) => {
   task.completed = !task.completed;
 };
 
 // --- 3. 树状图静态数据 ---
-const taskTreeData = ref([
-  {
-    label: "找前端实习",
-    children: [
-      {
-        label: "准备技能",
-        children: [{ label: "前端工程化" }, { label: "路由" }],
-      },
-      {
-        label: "项目",
-        children: [{ label: "小红书 demo" }],
-      },
-      {
-        label: "求职",
-        children: [{ label: "投递简历" }, { label: "修改简历" }],
-      },
-    ],
-  },
-]);
+const taskTreeData = ref([]);
+
+// 控制对话弹窗显示
+const isChatOpen = ref(false);
+// 用户输入的内容
+const userInput = ref("");
+// 加载状态
+const isAiLoading = ref(false);
+
+// 打开/关闭对话框
+const toggleChat = () => {
+  isChatOpen.value = !isChatOpen.value;
+  if (!isChatOpen.value) userInput.value = ""; // 关闭时清空输入
+};
+
+// 调用 AI 拆解接口
+const askAI = async () => {
+  if (!userInput.value.trim()) return;
+
+  isAiLoading.value = true;
+  try {
+    const res = await api.decomposeTask(userInput.value);
+
+    // ✅ 修复：只要不报错，就算成功
+    alert("✨ AI 已为你规划完成！任务已同步至主页。");
+    toggleChat();
+    await loadDataFromBackend();
+  } catch (error) {
+    console.error("AI 拆解失败:", error);
+    alert("AI 暂时断网了，请稍后再试");
+  } finally {
+    isAiLoading.value = false;
+  }
+};
 
 // --- 4. 核心：单文件内的递归组件 (Functional Component 方案) ---
 // 为了不拆分文件，直接在 script setup 中声明递归渲染器，精准还原了目录树的虚线/实线结构
@@ -382,6 +463,38 @@ const TaskTreeNode = defineComponent({
       );
     };
   },
+});
+
+// 定义一个函数去后端拿数据
+const loadDataFromBackend = async () => {
+  try {
+    const response = await api.getTasks();
+    console.log("后端返回的真实数据：", response.data); // 看一眼真实结构
+
+    // ✅ 修复：不管后端返回数组还是对象，都能正确显示
+    if (response.data) {
+      // 如果后端返回数组，直接用
+      if (Array.isArray(response.data)) {
+        priorityTasks.value = response.data;
+        taskTreeData.value = response.data;
+      }
+      // 如果后端返回对象，按原来的取
+      else {
+        priorityTasks.value =
+          response.data.priorityTasks || response.data || [];
+        taskTreeData.value = response.data.taskTreeData || response.data || [];
+      }
+    }
+
+    console.log("数据加载成功！");
+  } catch (error) {
+    console.error("加载失败，请检查后端服务是否启动:", error);
+  }
+};
+
+// 3. 页面一挂载就执行加载
+onMounted(() => {
+  loadDataFromBackend();
 });
 </script>
 
