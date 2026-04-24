@@ -1,7 +1,5 @@
 <template>
-  <div
-    class="w-full max-w-[400px] mx-auto bg-black text-white min-h-screen font-sans flex flex-col relative overflow-hidden pb-24 shadow-2xl"
-  >
+  <div class="w-full max-w-[400px] mx-auto bg-black text-white min-h-screen font-sans flex flex-col relative pb-24 shadow-2xl">
     <div
       class="flex justify-between items-center px-6 pt-3 text-[13px] font-medium"
     >
@@ -127,10 +125,9 @@
                 />
               </svg>
             </div>
-            <div
-              class="flex-1 h-4 rounded-full"
-              :class="task.completed ? 'bg-black/20' : 'bg-black/10'"
-            ></div>
+            <span class="text-black text-xs flex-1 truncate">{{
+              task.title
+            }}</span>
           </div>
         </div>
       </div>
@@ -291,6 +288,7 @@
     <div
       v-if="isChatOpen"
       class="fixed inset-0 z-[100] bg-black flex flex-col max-w-[400px] mx-auto border-x border-gray-800"
+      style="height: 100vh; height: 100dvh; overflow: hidden;"
     >
       <div
         class="p-6 flex justify-between items-center border-b border-gray-800"
@@ -316,21 +314,29 @@
         </button>
       </div>
 
-      <div class="flex-1 p-6 overflow-y-auto flex flex-col justify-end">
+      <div class="flex-1 p-6 overflow-y-auto flex flex-col justify-end gap-2">
+        <!-- 历史消息 -->
         <div
-          v-if="!isAiLoading"
-          class="bg-gray-900 self-start p-4 rounded-2xl rounded-bl-none max-w-[80%] text-gray-300 mb-4"
+          v-for="(msg, idx) in chatHistory"
+          :key="idx"
+          :class="
+            msg.isUser ? 'self-end bg-blue-600' : 'self-start bg-gray-800'
+          "
+          class="px-4 py-2 rounded-xl max-w-[80%] text-white"
         >
-          你好！告诉我你今天的目标（例如：开发一个简单的记事本APP），我来帮你拆解任务。
+          {{ msg.text }}
+          <button 
+            v-if="!msg.isUser && (msg.text.includes('规划') || msg.text.includes('建议'))"
+            @click="syncGoalToHome(lastGoal)"
+            class="mt-2 block w-full bg-green-600 hover:bg-green-700 py-1 rounded text-xs font-bold transition"
+          >
+            确认同步到主页
+          </button>
         </div>
-        <div
-          v-if="isAiLoading"
-          class="self-center flex flex-col items-center gap-3"
-        >
-          <div
-            class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"
-          ></div>
-          <p class="text-gray-500 text-sm">豆包 AI 正在思考并规划中...</p>
+
+        <!-- 加载中 -->
+        <div v-if="isAiLoading" class="self-center">
+          <div class="animate-spin h-6 w-6 border-b-2 border-blue-500"></div>
         </div>
       </div>
 
@@ -358,7 +364,7 @@
 </template>
 
 <script setup>
-import { ref, defineComponent, h, onMounted } from "vue"; // 加上 onMounted
+import { ref, defineComponent, h, onMounted  } from "vue"; // 加上 onMounted
 import { api } from "../api.js"; // 核心：引入你写的 api 对象
 
 // ... 下面是原本的代码
@@ -388,8 +394,11 @@ const taskTreeData = ref([]);
 const isChatOpen = ref(false);
 // 用户输入的内容
 const userInput = ref("");
+const chatHistory = ref([]); // 对话历史
 // 加载状态
 const isAiLoading = ref(false);
+// 记录最近一次用户的“目标”（用于同步/重试）
+const lastGoal = ref("");
 
 // 打开/关闭对话框
 const toggleChat = () => {
@@ -397,24 +406,42 @@ const toggleChat = () => {
   if (!isChatOpen.value) userInput.value = ""; // 关闭时清空输入
 };
 
+// （最小闭环）拆解入库并刷新主页
+const syncGoalToHome = async (goal) => {
+  const cleanGoal = (goal || "").trim();
+  if (!cleanGoal) return;
+
+  isAiLoading.value = true;
+  try {
+    const res = await api.decomposeTask(cleanGoal);
+    chatHistory.value.push({
+      text: res.data?.reply || "规划完成，已同步到主页。",
+      isUser: false,
+    });
+    await loadDataFromBackend();
+  } catch (error) {
+    console.error("同步失败:", error);
+    chatHistory.value.push({
+      text: "同步失败：请检查后端是否正常、数据库连接是否正确。",
+      isUser: false,
+    });
+  } finally {
+    isAiLoading.value = false;
+  }
+};
+
 // 调用 AI 拆解接口
 const askAI = async () => {
   if (!userInput.value.trim()) return;
 
-  isAiLoading.value = true;
-  try {
-    const res = await api.decomposeTask(userInput.value);
+  // 1. 立即展示用户话语
+  const userText = userInput.value;
+  lastGoal.value = userText;
+  chatHistory.value.push({ text: userText, isUser: true });
+  userInput.value = "";
 
-    // ✅ 修复：只要不报错，就算成功
-    alert("✨ AI 已为你规划完成！任务已同步至主页。");
-    toggleChat();
-    await loadDataFromBackend();
-  } catch (error) {
-    console.error("AI 拆解失败:", error);
-    alert("AI 暂时断网了，请稍后再试");
-  } finally {
-    isAiLoading.value = false;
-  }
+  // 2. 直接走“拆解+入库”接口，形成最小闭环
+  await syncGoalToHome(userText);
 };
 
 // --- 4. 核心：单文件内的递归组件 (Functional Component 方案) ---
@@ -465,30 +492,63 @@ const TaskTreeNode = defineComponent({
   },
 });
 
+const priorityRank = (p) => {
+  if (p === "高") return 3;
+  if (p === "中") return 2;
+  if (p === "低") return 1;
+  return 0;
+};
+
+const buildTaskTree = (rows) => {
+  const byId = new Map();
+  const roots = [];
+
+  for (const t of rows) {
+    byId.set(t.id, { label: t.title, children: [], raw: t });
+  }
+  for (const t of rows) {
+    const node = byId.get(t.id);
+    if (!node) continue;
+    if (t.parent_id && byId.has(t.parent_id)) {
+      byId.get(t.parent_id).children.push(node);
+    } else if (t.task_type === "main" || t.parent_id == null) {
+      roots.push(node);
+    }
+  }
+  return roots;
+};
+
 // 定义一个函数去后端拿数据
 const loadDataFromBackend = async () => {
   try {
     const response = await api.getTasks();
-    console.log("后端返回的真实数据：", response.data); // 看一眼真实结构
+    
+    // ✅ 修复逻辑：
+    // response.data 是后端返回的大对象 { success: true, data: [...] }
+    // 我们需要的是里面的 data 数组
+    const realDataArray = response.data.data || []; 
 
-    // ✅ 修复：不管后端返回数组还是对象，都能正确显示
-    if (response.data) {
-      // 如果后端返回数组，直接用
-      if (Array.isArray(response.data)) {
-        priorityTasks.value = response.data;
-        taskTreeData.value = response.data;
-      }
-      // 如果后端返回对象，按原来的取
-      else {
-        priorityTasks.value =
-          response.data.priorityTasks || response.data || [];
-        taskTreeData.value = response.data.taskTreeData || response.data || [];
-      }
+    if (Array.isArray(realDataArray)) {
+      const normalized = realDataArray.map((t) => ({
+        ...t,
+        completed: t.status === "done" || t.status === "completed",
+      }));
+
+      // 优先级列表：主线优先 + 优先级高优先 + 新创建优先
+      const sorted = [...normalized].sort((a, b) => {
+        if (a.task_type !== b.task_type) return a.task_type === "main" ? -1 : 1;
+        const pr = priorityRank(b.priority) - priorityRank(a.priority);
+        if (pr !== 0) return pr;
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      });
+
+      priorityTasks.value = sorted.slice(0, 5);
+      taskTreeData.value = buildTaskTree(normalized);
     }
 
     console.log("数据加载成功！");
   } catch (error) {
-    console.error("加载失败，请检查后端服务是否启动:", error);
+    console.error("加载失败:", error);
   }
 };
 
