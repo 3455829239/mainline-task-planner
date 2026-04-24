@@ -1,8 +1,8 @@
+require('dotenv').config();
 const express = require("express");
 const cors = require("cors");
 const mysql = require("mysql2/promise");
 const { OpenAI } = require("openai");
-require("dotenv").config();
 
 const app = express(); // 👈 就是这行被删掉了，导致了报错
 const port = 3000;
