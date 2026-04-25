@@ -6,16 +6,17 @@ const service = axios.create({
 });
 
 export const api = {
+  // 你原来的接口
   getTasks() {
     return service.get("/tasks");
   },
-
-  // 已修复
   decomposeTask(goal) {
     return service.post("/tasks/ai-decompose", { goal });
   },
 
-  updateTaskStatus(id, status) {
-    return service.post("/tasks/update", { id, status });
+  // 👈 在这里加一个新的对话接口 👇
+  chat(message) {
+    // 对应后端的 /api/chat
+    return service.post("/chat", { message });
   },
 };

@@ -325,12 +325,13 @@
           class="px-4 py-2 rounded-xl max-w-[80%] text-white"
         >
           {{ msg.text }}
-          <button 
-            v-if="!msg.isUser && (msg.text.includes('规划') || msg.text.includes('建议'))"
-            @click="syncGoalToHome(lastGoal)"
-            class="mt-2 block w-full bg-green-600 hover:bg-green-700 py-1 rounded text-xs font-bold transition"
+          <button
+            v-if="!msg.isUser && msg.canSync && !msg.synced"
+            @click="syncGoalToHome(msg)"
+            :disabled="isAiLoading || msg.syncing"
+            class="mt-2 block w-full bg-green-600 hover:bg-green-700 py-1 rounded text-xs font-bold transition disabled:opacity-50"
           >
-            确认同步到主页
+            {{ msg.syncing ? "同步中..." : "确认同步到主页" }}
           </button>
         </div>
 
@@ -407,25 +408,44 @@ const toggleChat = () => {
 };
 
 // （最小闭环）拆解入库并刷新主页
-const syncGoalToHome = async (goal) => {
-  const cleanGoal = (goal || "").trim();
+const syncGoalToHome = async (msg) => {
+  const cleanGoal = (msg?.goal || "").trim();
   if (!cleanGoal) return;
 
+  // 前端防连点
+  msg.syncing = true;
   isAiLoading.value = true;
+
   try {
     const res = await api.decomposeTask(cleanGoal);
+
+    // 同步成功：标记已同步，避免再次显示按钮
+    msg.synced = true;
+    msg.canSync = false;
+
+    // 这里不要再 push “规划完成”导致重复卡片（可选）
+    // 如果你想提示成功，可以追加一条短提示，但不再带同步按钮：
     chatHistory.value.push({
-      text: res.data?.reply || "规划完成，已同步到主页。",
+      text: res.data?.reply || "已同步到主页。",
       isUser: false,
+      canSync: false,
     });
-    await loadDataFromBackend();
+
+    // 只拉“最新 plan”的数据刷新主页
+    await loadLatestDataFromBackend();
+
+    // 关闭对话框，回到主页
+    isChatOpen.value = false;
+    userInput.value = "";
   } catch (error) {
     console.error("同步失败:", error);
     chatHistory.value.push({
-      text: "同步失败：请检查后端是否正常、数据库连接是否正确。",
+      text: "同步失败：请检查后端 /api/tasks/ai-decompose 和数据库连接。",
       isUser: false,
+      canSync: false,
     });
   } finally {
+    msg.syncing = false;
     isAiLoading.value = false;
   }
 };
@@ -434,14 +454,38 @@ const syncGoalToHome = async (goal) => {
 const askAI = async () => {
   if (!userInput.value.trim()) return;
 
-  // 1. 立即展示用户话语
-  const userText = userInput.value;
+  const userText = userInput.value.trim();
   lastGoal.value = userText;
+
+  // 1) 先展示用户消息
   chatHistory.value.push({ text: userText, isUser: true });
   userInput.value = "";
 
-  // 2. 直接走“拆解+入库”接口，形成最小闭环
-  await syncGoalToHome(userText);
+  // 2) 调 chat 接口生成规划文本（不入库）
+  isAiLoading.value = true;
+  try {
+    const res = await api.chat(userText);
+    const replyText = res.data?.reply || "我已生成规划方案，你可以确认同步到主页。";
+
+    // 这条 AI 消息“可同步”
+    chatHistory.value.push({
+      text: replyText,
+      isUser: false,
+      canSync: true,
+      synced: false,
+      syncing: false,
+      goal: userText, // 绑定本次 goal，避免用 lastGoal 导致错同步
+    });
+  } catch (e) {
+    console.error("对话失败:", e);
+    chatHistory.value.push({
+      text: "对话失败：请检查后端 /api/chat 是否正常。",
+      isUser: false,
+      canSync: false,
+    });
+  } finally {
+    isAiLoading.value = false;
+  }
 };
 
 // --- 4. 核心：单文件内的递归组件 (Functional Component 方案) ---
@@ -519,14 +563,10 @@ const buildTaskTree = (rows) => {
 };
 
 // 定义一个函数去后端拿数据
-const loadDataFromBackend = async () => {
+const loadLatestDataFromBackend = async () => {
   try {
     const response = await api.getTasks();
-    
-    // ✅ 修复逻辑：
-    // response.data 是后端返回的大对象 { success: true, data: [...] }
-    // 我们需要的是里面的 data 数组
-    const realDataArray = response.data.data || []; 
+    const realDataArray = response.data.data || [];
 
     if (Array.isArray(realDataArray)) {
       const normalized = realDataArray.map((t) => ({
@@ -534,7 +574,6 @@ const loadDataFromBackend = async () => {
         completed: t.status === "done" || t.status === "completed",
       }));
 
-      // 优先级列表：主线优先 + 优先级高优先 + 新创建优先
       const sorted = [...normalized].sort((a, b) => {
         if (a.task_type !== b.task_type) return a.task_type === "main" ? -1 : 1;
         const pr = priorityRank(b.priority) - priorityRank(a.priority);
@@ -545,17 +584,15 @@ const loadDataFromBackend = async () => {
       priorityTasks.value = sorted.slice(0, 5);
       taskTreeData.value = buildTaskTree(normalized);
     }
-
-    console.log("数据加载成功！");
   } catch (error) {
-    console.error("加载失败:", error);
+    console.error("加载最新任务失败:", error);
   }
 };
 
 // 3. 页面一挂载就执行加载
-onMounted(() => {
+/*onMounted(() => {
   loadDataFromBackend();
-});
+});*/
 </script>
 
 <style scoped>
