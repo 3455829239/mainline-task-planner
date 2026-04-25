@@ -1,23 +1,5 @@
 <template>
   <div class="w-full max-w-[400px] mx-auto bg-black text-white min-h-screen font-sans flex flex-col relative pb-24 shadow-2xl">
-    <div
-      class="flex justify-between items-center px-6 pt-3 text-[13px] font-medium"
-    >
-      <span>9:41</span>
-      <div class="flex space-x-1.5 items-center">
-        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M2 22h20V2L2 22z" />
-        </svg>
-        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-          <path
-            d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"
-          />
-        </svg>
-        <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M17 4h-3V2h-4v2H7v18h10V4z" />
-        </svg>
-      </div>
-    </div>
 
     <div
       class="flex justify-between items-center mt-6 px-4 text-gray-500 text-xs"
@@ -59,7 +41,7 @@
               d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
             />
           </svg>
-          12 Dec
+          {{ monthDayText }}
         </div>
         <button
           @click="toggleChat"
@@ -68,27 +50,41 @@
           进入对话
         </button>
       </div>
-      <div class="text-[13px] opacity-90 mb-1">Today's AI Analysis</div>
+      <div class="text-[13px] opacity-90 mb-1">
+        {{ currentGoal ? goalDisplay : "点击右上角进入对话" }}
+      </div>
+
       <div class="text-2xl font-bold leading-tight">
-        You Have 5 <br />
-        Tasks
-        <span
-          class="inline-flex items-center bg-white/25 text-xs px-2 py-0.5 rounded-full mx-1 align-middle"
-          >urgent
-          <svg
-            class="w-3 h-3 ml-0.5"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
+        <template v-if="!hasTasks">
+          Welcome<br />
+          <span class="text-base font-medium opacity-90">
+            点击右上角进入对话，开始分解你的目标
+          </span>
+        </template>
+
+        <template v-else>
+          You Have {{ totalCount }} <br />
+          Task<span v-if="totalCount !== 1">s</span>
+          <span
+            class="inline-flex items-center bg-white/25 text-xs px-2 py-0.5 rounded-full mx-1 align-middle"
           >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M17 8l4 4m0 0l-4 4m4-4H3"
-            /></svg
-        ></span>
-        for Today.
+            urgent
+            <svg
+              class="w-3 h-3 ml-0.5"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M17 8l4 4m0 0l-4 4m4-4H3"
+              />
+            </svg>
+          </span>
+          for Today.
+        </template>
       </div>
     </div>
 
@@ -152,7 +148,7 @@
                 <path
                   class="text-[#f52b7a]"
                   stroke-width="4"
-                  stroke-dasharray="30, 100"
+                  :stroke-dasharray="`${progressPercent}, 100`"
                   stroke-linecap="round"
                   stroke="currentColor"
                   fill="none"
@@ -162,25 +158,28 @@
               <div
                 class="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-white"
               >
-                30%
+              {{ progressPercent }}%
               </div>
             </div>
             <div class="text-[11px] leading-snug text-gray-300">
               <span class="font-bold text-white text-xs">Today</span><br />
               Completed<br />
-              <span class="text-gray-500">22/72 task</span>
+              <span class="text-gray-500">{{ completedCount }}/{{ totalCount }} task</span>
             </div>
           </div>
 
           <div>
             <div class="text-[11px] font-bold mb-1">Goal</div>
             <div class="w-full h-3.5 bg-[#3a3a3c] rounded-full overflow-hidden">
-              <div class="w-[30%] h-full bg-[#8e8e93] rounded-full"></div>
+              <div
+                class="h-full bg-[#8e8e93] rounded-full"
+                :style="{ width: progressPercent + '%' }"
+              ></div>
             </div>
           </div>
         </div>
 
-        <div
+        <!--<div
           class="bg-[#242426] rounded-[1.5rem] p-4 flex items-center gap-3 flex-1"
         >
           <div
@@ -204,7 +203,7 @@
             <div class="font-bold">延期任务</div>
             <div class="text-gray-500 mt-0.5">6 task</div>
           </div>
-        </div>
+        </div>-->
       </div>
     </div>
 
@@ -365,24 +364,98 @@
 </template>
 
 <script setup>
-import { ref, defineComponent, h, onMounted  } from "vue"; // 加上 onMounted
+import { ref, defineComponent, h, computed, onMounted, onBeforeUnmount } from "vue"; // 加上 onMounted
 import { api } from "../api.js"; // 核心：引入你写的 api 对象
 
 // ... 下面是原本的代码
 
-// --- 1. 日历数据模拟 ---
-const weekDays = ref([
-  { week: "日", date: "12", active: false },
-  { week: "一", date: "13", active: false },
-  { week: "二", date: "14", active: true },
-  { week: "三", date: "15", active: false },
-  { week: "四", date: "16", active: false },
-  { week: "五", date: "17", active: false },
-  { week: "六", date: "18", active: false },
-]);
+// --- 1. 日历数据（系统时间驱动）---
+const now = ref(new Date());
+let clockTimer;
+
+onMounted(() => {
+  clockTimer = setInterval(() => {
+    now.value = new Date();
+  }, 60_000);
+});
+
+onBeforeUnmount(() => {
+  clearInterval(clockTimer);
+});
+
+const monthDayText = computed(() => {
+  const d = now.value;
+  const day = String(d.getDate()).padStart(2, "0");
+  const month = d.toLocaleString("en-US", { month: "short" });
+  return `${day} ${month}`;
+});
+
+const weekDays = computed(() => {
+  const d = now.value;
+  const labels = ["日", "一", "二", "三", "四", "五", "六"];
+
+  // 以“今天”为中心：前3天 + 今天 + 后3天
+  const start = new Date(d);
+  start.setDate(d.getDate() - 3);
+
+  return Array.from({ length: 7 }).map((_, i) => {
+    const date = new Date(start);
+    date.setDate(start.getDate() + i);
+
+    const isToday =
+      date.getFullYear() === d.getFullYear() &&
+      date.getMonth() === d.getMonth() &&
+      date.getDate() === d.getDate();
+
+    return {
+      week: labels[date.getDay()],
+      date: String(date.getDate()),
+      active: isToday,
+    };
+  });
+});
 
 // --- 2. 优先级任务数据 (双向绑定测试) ---
 const priorityTasks = ref([]);
+const allTasks = ref([]); // 本次 plan 的全部任务（主+子）
+
+const totalCount = computed(() => allTasks.value.length);
+
+const completedCount = computed(() =>
+  allTasks.value.reduce((acc, t) => acc + (t.completed ? 1 : 0), 0),
+);
+
+const progressPercent = computed(() => {
+  if (totalCount.value === 0) return 0;
+  return Math.round((completedCount.value / totalCount.value) * 100);
+});
+
+const currentGoal = ref("");
+
+const extractCoreGoal = (text) => {
+  const t = (text || "").trim();
+  if (!t) return "";
+  const cleaned = t.replace(/[。！？!?.]+$/g, "").trim();
+  return cleaned.length > 18 ? cleaned.slice(0, 18) + "…" : cleaned;
+};
+
+const goalDisplay = computed(() => {
+  if (!currentGoal.value) return "提示：请先输入你的目标";
+  return currentGoal.value;
+});
+
+const hasTasks = computed(() => totalCount.value > 0);
+
+const headerTitle = computed(() => {
+  if (!hasTasks.value) return "Welcome";
+  const n = totalCount.value;
+  return `You Have ${n} Task${n === 1 ? "" : "s"} for Today.`;
+});
+
+const headerSubtitle = computed(() => {
+  if (!hasTasks.value) return "点击右上角进入对话，开始分解你的目标。";
+  return "Today's Plan";
+});
 
 const toggleTask = (task) => {
   task.completed = !task.completed;
@@ -431,6 +504,7 @@ const syncGoalToHome = async (msg) => {
       canSync: false,
     });
 
+    currentGoal.value = extractCoreGoal(msg.goal);
     // 只拉“最新 plan”的数据刷新主页
     await loadLatestDataFromBackend();
 
@@ -456,6 +530,7 @@ const askAI = async () => {
 
   const userText = userInput.value.trim();
   lastGoal.value = userText;
+  currentGoal.value = extractCoreGoal(userText);
 
   // 1) 先展示用户消息
   chatHistory.value.push({ text: userText, isUser: true });
@@ -583,6 +658,9 @@ const loadLatestDataFromBackend = async () => {
 
       priorityTasks.value = sorted.slice(0, 5);
       taskTreeData.value = buildTaskTree(normalized);
+      
+      // 👈 在这里插入下面这一行
+      allTasks.value = normalized;
     }
   } catch (error) {
     console.error("加载最新任务失败:", error);
